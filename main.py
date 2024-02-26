@@ -208,30 +208,16 @@ def get_cid_by_bvid(bvid):
 def agent_generate_bvid_resources(bvid):
     tool_list = [mp4_2_mp3, mp3_2_text, summarize_text, create_bilibili_dynamic]
 
-
-    # prompt = XMLAgent.get_default_prompt()
-    # prompt = ChatPromptTemplate.from_messages(
-    #     [
-    #         ('system', "You are very powerful assistant, but don't know current events"),
-    #         ('user', "{input}"),
-    #         MessagesPlaceholder(variable_name='agent_scratchpad')
-    #     ]
-    # )
     model = ChatOpenAI()
-    # prompt_text = f"将{bvid}.mp4视频文件,转换为{bvid}.mp3音频，再转为TXT文本,对TXT文本进行总结摘要,将摘要发到Bilibili动态"
-#    prompt_template = f"将视频文件{input},转换为音频，音频再转为文字,对文字进行总结摘要,将摘要发到b站。输出格式化为`{input}`"
     prompt_template = PromptTemplate(
-        template="将视频文件{input},转换为音频，音频再转为文字,对文字进行总结摘要,将摘要发到b站。输出格式化为{input}",
+        template="将视频文件{input},转换为音频，音频再转为文字,对文字进行总结摘要,将摘要发到b站。输出格式化为:{input}",
         input_variables=["input"],
     )
-    # model_with_tools = model.bind(functions=[format_tool_to_openai_function(t) for t in tool_list])
 
     agent = initialize_agent(tool_list, model, verbose=True, handle_parsing_errors=True,
                              agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION)
 
-    print(agent.invoke(prompt_template.format(input=bvid)).get("output"))
-    # agent_executor = AgentExecutor(agent=agent, tools=tool_list, verbose=False)
-    # print(agent_executor.invoke({"input":prompt_text}))
+    agent.invoke(prompt_template.format(input=bvid)).get("output")
 
 @tool
 def get_sources_text(bvid):
