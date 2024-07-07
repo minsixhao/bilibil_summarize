@@ -9,7 +9,7 @@
   
   参考资料：
   
-  - **仓库**：[minsixhao/storm](https://github.com/minsixhao/storm)
+  - **仓库**：[stanford-oval/storm](https://github.com/stanford-oval/storm)
   - **论文**：[arxiv.org/pdf/2402.14207](https://arxiv.org/pdf/2402.14207)
 
 
