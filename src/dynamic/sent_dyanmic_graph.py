@@ -1,27 +1,17 @@
-
-from typing import TypedDict
-from langgraph.graph import END, StateGraph
-from langchain_openai import ChatOpenAI
-from langchain.chains.combine_documents.stuff import StuffDocumentsChain
-from langchain.chains.llm import LLMChain
-from langchain_core.prompts import PromptTemplate
-from langchain.schema import Document
-
-from fake_useragent import UserAgent
-from openai import OpenAI
-
-from tools import DyanmicTools
-
-import moviepy.editor as mp
+import asyncio
 import os
 import json
-import requests
-import sqlite3
-import tempfile
+import httpx
+from uuid import uuid4
+from typing import TypedDict
+from langgraph.graph import END, StateGraph
+from tools import DyanmicTools, BilibiliDownloader
+unique_id = uuid4().hex[0:8]
 
 DATABASE_PATH = '/Users/mins/Desktop/github/bilibili_summarize/db/sqlite/bilibili.db'
 BASE_URL = '/Users/mins/Desktop/github/bilibili_summarize/static'
 COOKIE_PATH = '/bilibili_summarize/cookie/cookie.json'
+
 
 class MyState(TypedDict):
     id: str
@@ -31,79 +21,90 @@ class MyState(TypedDict):
     summary: str
     dynamic: bool
 
-dyanmicTools = DyanmicTools()
-def download_video_node(state: MyState):
-    # 下载视频
-    return {"video": "已完成"}
 
-def video_2_audio_node(state: MyState):
-    # 视频转音频
-    id = state["id"]
-    try:
-        dyanmicTools.video_2_audio(id)
-        return {"audio": "已完成"}
-    except Exception as e:
-        return {"audio": e}
+class DynamicToolsWorkflow:
+    def __init__(self):
+        self.workflow = StateGraph(MyState)
+        self.setup_workflow()
+        self.dyanmicTools = DyanmicTools()
 
-def audio_2_content_node(state: dict):
-    # 音频转换为文本
-    id = state["id"]
-    try:
-        dyanmicTools.audio_2_content(id)
-        return {"content": "已完成"}
-    except Exception as e:
-        return {"content": e}
+    def setup_workflow(self):
 
-def content_2_summary_node(state: MyState):
-    # 文本摘要
-    id = state["id"]
-    try:
-        dyanmicTools.content_2_summary(id)
-        return {"summary": "已完成"}
-    except Exception as e:
-        return {"summary": e}
+        def video_2_audio_node(state: MyState):
+            id = state["id"]
+            try:
+                self.dyanmicTools.video_2_audio(id)
+                return {"audio": "已完成"}
+            except Exception as e:
+                return {"audio": str(e)}
 
-def sent_bilibili_dynamic_node(state: MyState):
-    # 发布 bilibili 动态
-    id = state["id"]
-    try:
-        dyanmicTools.sent_bilibili_dynamic(id)
-        return {"dynamic": "已完成"}
-    except Exception as e:
-        return {"dynamic": e}
+        def audio_2_content_node(state: MyState):
+            id = state["id"]
+            try:
+                self.dyanmicTools.audio_2_content(id)
+                return {"content": "已完成"}
+            except Exception as e:
+                return {"content": str(e)}
 
+        def content_2_summary_node(state: MyState):
+            id = state["id"]
+            try:
+                self.dyanmicTools.content_2_summary(id)
+                return {"summary": "已完成"}
+            except Exception as e:
+                return {"summary": str(e)}
 
-workflow = StateGraph(MyState)
-workflow.add_node("VideoDownloader", download_video_node)
-workflow.add_node("AudioExtractor", video_2_audio_node)
-workflow.add_node("Transcriber", audio_2_content_node)
-workflow.add_node("Summarizer", content_2_summary_node)
-workflow.add_node("BilibiliDynamicPoster", sent_bilibili_dynamic_node)
+        def sent_bilibili_dynamic_node(state: MyState):
+            id = state["id"]
+            try:
+                self.dyanmicTools.sent_bilibili_dynamic(id)
+                return {"dynamic": "已完成"}
+            except Exception as e:
+                return {"dynamic": str(e)}
 
-workflow.set_entry_point("VideoDownloader")
-workflow.add_edge("VideoDownloader", "AudioExtractor")
-workflow.add_edge("AudioExtractor", "Transcriber")
-workflow.add_edge("Transcriber", "Summarizer")
-workflow.add_edge("Summarizer", "BilibiliDynamicPoster")
-workflow.add_edge("BilibiliDynamicPoster", END)
+        # self.workflow.add_node("VideoDownloader", download_video_node)
+        self.workflow.add_node("AudioExtractor", video_2_audio_node)
+        self.workflow.add_node("Transcriber", audio_2_content_node)
+        self.workflow.add_node("Summarizer", content_2_summary_node)
+        self.workflow.add_node("BilibiliDynamicPoster", sent_bilibili_dynamic_node)
+        self.workflow.set_entry_point("AudioExtractor")
 
-# 编译工作流图
-graph = workflow.compile()
+        # self.workflow.add_edge("VideoDownloader", "AudioExtractor")
+        self.workflow.add_edge("AudioExtractor", "Transcriber")
+        self.workflow.add_edge("Transcriber", "Summarizer")
+        self.workflow.add_edge("Summarizer", "BilibiliDynamicPoster")
+        self.workflow.add_edge("BilibiliDynamicPoster", END)
 
-from IPython.display import Image, display
-# 画出工作流图
-display(Image(graph.get_graph(xray=1).draw_mermaid_png()))
+    def compile_workflow(self):
+        self.graph = self.workflow.compile()
+        from IPython.display import Image, display
+        display(Image(self.graph.get_graph(xray=1).draw_mermaid_png()))
 
-input = {
-    "id":"BV1AS421N7Rc",
-    "video": "未完成",
-    "audio": "未完成",
-    "content": "未完成",
-    "summary": "未完成",
-    "dynamic": False,
-}
-# 执行工作流图，流式输出
-events = graph.stream(input)
-for s in events:
-    print(s)
-    print("----")
+    def run_workflow(self, input_data):
+        events = self.graph.stream(input_data)
+        for s in events:
+            print(s)
+            print("----")
+
+# 使用示例
+if __name__ == "__main__":
+    id = "BV1jK421b7Z2"
+    bilibiliDownloader = BilibiliDownloader()
+    asyncio.get_event_loop().run_until_complete(bilibiliDownloader.download_video(id))
+
+    # loop = asyncio.get_event_loop()
+    # task = loop.create_task(bilibiliDownloader.download_video(id))
+    # loop.run_until_complete(task)
+
+    input_data = {
+        "id": id, # 梁启超
+        "video": "未完成",
+        "audio": "未完成",
+        "content": "未完成",
+        "summary": "未完成",
+        "dynamic": False,
+    }
+
+    workflow_manager = DynamicToolsWorkflow()
+    workflow_manager.compile_workflow()
+    workflow_manager.run_workflow(input_data)
