@@ -11,6 +11,7 @@ unique_id = uuid4().hex[0:8]
 DATABASE_PATH = '/Users/mins/Desktop/github/bilibili_summarize/db/sqlite/bilibili.db'
 BASE_URL = '/Users/mins/Desktop/github/bilibili_summarize/static'
 COOKIE_PATH = '/bilibili_summarize/cookie/cookie.json'
+os.environ["OPENAI_API_KEY"] = "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"
 
 
 class MyState(TypedDict):
@@ -88,7 +89,7 @@ class DynamicToolsWorkflow:
 
 # 使用示例
 if __name__ == "__main__":
-    id = "BV1jK421b7Z2"
+    id = "BV1tz421i7PT"
     bilibiliDownloader = BilibiliDownloader()
     asyncio.get_event_loop().run_until_complete(bilibiliDownloader.download_video(id))
 

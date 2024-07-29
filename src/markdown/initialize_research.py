@@ -12,7 +12,10 @@ class InitializeResearch:
     def get_research_ids(self):
         research_ids = []
         for keyword in self.keywords:
+            print(keyword)
             baike_data_id = self.baike.get_document_data(keyword)
+            print(baike_data_id)
+            print('---')
             if baike_data_id is None:
                 print(f"{keyword} not found in baike")
                 continue
@@ -53,11 +56,15 @@ def save_to_json_file(data, filename):
 
 
 
+if __name__ == "__main__":
+    initialize_research = InitializeResearch(TOPICS_KEYWORDS)
+    try:
+        ids = initialize_research.get_research_ids()
+        print(ids)
+        htmls = initialize_research.get_research_data(ids)
+        datas = initialize_research.load_html(ids)
+        print(datas)
+        save_to_json_file(datas, 'data.json')  # 保存到 data.json 文件中
 
-initialize_research = InitializeResearch(TOPICS_KEYWORDS)
-
-ids = initialize_research.get_research_ids()
-htmls = initialize_research.get_research_data(ids)
-datas = initialize_research.load_html(ids)
-print(datas)
-save_to_json_file(datas, 'data.json')  # 保存到 data.json 文件中
+    except Exception as e:
+        print(e)

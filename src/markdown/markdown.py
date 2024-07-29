@@ -1,9 +1,10 @@
-from typing import TypedDict, List, Dict, Annotated
+from typing import TypedDict, List, Dict, Annotated, Any
 from langgraph.graph import END, StateGraph
 from langchain_openai import ChatOpenAI
 from langchain.chains.combine_documents.stuff import StuffDocumentsChain
 from langchain.chains.llm import LLMChain
 from langchain_core.prompts import PromptTemplate
+from langchain_core.messages import AIMessage
 from langchain.schema import Document
 
 from fake_useragent import UserAgent
@@ -16,7 +17,7 @@ import sys
 
 # sys.path.append('/Users/mins/Desktop/github/bilibili_summarize')
 
-from tools import GenerateMarkdown, SummaryMarkdown, TopicMarkdown, KeyWordMarkdown
+from tools import GenerateMarkdown, SummaryMarkdown, TopicsMarkdown, KeyWordMarkdown, TopicMarkdown
 from database import Database
 
 class Sentence(TypedDict):
@@ -42,10 +43,11 @@ class State(TypedDict):
     content_text: str
     markdown: str
     summary_markdown: str
+    topic: str
     perspectives: Annotated[str, lambda x, y: f"{x}+{y}"]
     topics: Annotated[str, lambda x, y: f"{x}+{y}"]
     keywords: Annotated[str, lambda x, y: f"{x}+{y}"]
-    topics_keywords: List[str]
+    topics_keywords: str
 
 
 class LoaderKnowledge:
@@ -78,7 +80,7 @@ class BilibiliSummarizer:
     def get_topics(self, state: State):
         id = state['id']
         summary_md = state['summary_markdown']
-        topics = TopicMarkdown().generate_topics(summary_md, id)
+        topics = TopicsMarkdown().generate_topics(summary_md, id)
         return {"topics": topics}
 
     def get_keywords(self, state: State):
@@ -90,45 +92,187 @@ class BilibiliSummarizer:
     def merge_topics_keywords(self, state: State):
         topic_list = state['topics']
         keywords_list = state['keywords']
-        return {"topics_keywords": topic_list + keywords_list }
+        meger_list = topic_list + keywords_list
+        return {"topics_keywords": meger_list}
+    
+    def generate_topic(self, state: State):
+        id = state['id']
+        topics_keywords = state['topics_keywords']
+        topic = TopicMarkdown().generate_topic(topics_keywords, id)
+        return {"topic": topic}
 
     def create_workflow(self):
         workflow = StateGraph(State)
         workflow.add_node("ContentGetter", self.get_content_text)
         workflow.add_node("MarkdownCreator", self.generate_markdown)
         workflow.add_node("ContentSummarizer", self.summary_markdown)
-        workflow.add_node("TopicExtractor", self.get_topics)
+        workflow.add_node("TopicsExtractor", self.get_topics)
         workflow.add_node("KeywordExtractor", self.get_keywords)
         # workflow.add_node("BaikeResearcher", self.baike_search)
         workflow.add_node("Merger", self.merge_topics_keywords)
+        workflow.add_node("TopicGenerator", self.generate_topic)
         workflow.set_entry_point("ContentGetter")
 
         workflow.add_edge("ContentGetter", "MarkdownCreator")
         workflow.add_edge("MarkdownCreator", "ContentSummarizer")
-        workflow.add_edge("ContentSummarizer", "TopicExtractor")
+        workflow.add_edge("ContentSummarizer", "TopicsExtractor")
         workflow.add_edge("ContentSummarizer", "KeywordExtractor")
-        workflow.add_edge(["TopicExtractor", "KeywordExtractor"], "Merger")
-        workflow.add_edge("Merger", END)
+        workflow.add_edge(["TopicsExtractor", "KeywordExtractor"], "Merger")
+        workflow.add_edge("Merger", "TopicGenerator")
+        workflow.add_edge("TopicGenerator", END)
         # workflow.add_edge("BaikeResearcher", END)
 
         return workflow
 
-if __name__ == "__main__":
-    summarizer = BilibiliSummarizer()
-    workflow = summarizer.create_workflow()
 
-    id = "BV1jK421b7Z2"
-    # id = "BV1AS421N7Rc"
+from generate_perspectives_conversation import PerspectiveGenerator, Editor, InterviewSystem
+from generate_refine_outline import RefineOutline
+from generate_article import GenerateArticle, GenerateSections
+from collections import defaultdict
+import asyncio
+
+class MarkdownState(TypedDict):
+    id: str
+    keywords: str
+    topic: str
+    perspectives: List[Editor]
+    conversations: List[Any]
+    references: List[Any]
+    refine_outline: Any
+    article: Any
+
+class MarkdownGenerator:
+    def __init__(self):
+        self.id = str
+        self.db = Database(DATABASE_PATH)
+
+    def get_topic(self, state: State):
+        topic = self.db.query('dynamic', 'topic', 'id = ?', (state['id'],))[0][0]
+        return {"topic": topic}
+
+    # def search_keywords(self, state: MarkdownState):
+    #     keywords = state['keywords']
+
+    async def generate_perspectives(self, state: MarkdownState):
+        topic = state['topic']
+        perspectives = await PerspectiveGenerator().generate_perspectives(topic)
+        return {"perspectives": perspectives}
+
+    async def generate_conversation(self, state: MarkdownState):
+        perspectives = state['perspectives']
+        topic = state['topic']
+        interview_system = InterviewSystem()
+        interview_graph = interview_system.build_graph()
+        conversations = []
+        merged_references = defaultdict(str)
+        for editor in perspectives.editors:
+            initial_state = {
+                "editor": editor,
+                "messages": [
+                    AIMessage(
+                        content=f"听说你在写一篇关于 {topic} 的文章？",
+                        name="Subject_Matter_Expert",
+                    )
+                ],
+            }
+            ask_answer = await interview_graph.ainvoke(initial_state)
+            # conversation +=  "\n\n".join(
+            #     f"### {m.name}\n\n{m.content}" for m in res["messages"]
+            # )
+
+            # 聚合对话消息
+            conversations += ask_answer["messages"]
+            for key, value in ask_answer.get("references", {}).items():
+                merged_references[key] = value
+        references = {"references": dict(merged_references)}
+        return {"conversations": conversations, "references": references}
+
+    def generate_refine_outline(self, state: MarkdownState):
+        id = state['id']
+        conversations = state['conversations']
+        topic = state['topic']
+        refine_outline = RefineOutline(conversations, id, topic).generate_refine_outline()
+        return {"refine_outline": refine_outline}
+
+    async def generate_article(self, state: MarkdownState):
+        refine_outline = state['refine_outline']
+        references = state['references']
+        topic = state['topic']
+
+        print("refine_outline:", refine_outline)
+        print("refine_outline.sections:", refine_outline.sections)
+        sections = ""
+        for section in refine_outline.sections:
+            section_title = section.section_title
+            print('-- generate_article:', section_title, references, topic)
+            gen_section = GenerateSections(refine_outline, section_title, references, topic)
+            section = await gen_section.generate_section()
+            sections += '\n\n' + section
+            print('-- generate_article sections:', sections)
+
+        gen_article = GenerateArticle(topic, sections)
+        article = await gen_article.generate_article()
+        return {"article": article}
+
+    def generate_markdown(self):
+        workflow = StateGraph(MarkdownState)
+        workflow.add_node('TopicGetter', self.get_topic)
+        workflow.add_node('PerspectivesGenerator', self.generate_perspectives)
+        workflow.add_node('ConversationGenerator', self.generate_conversation)
+        workflow.add_node('RefineOutlineGenerator', self.generate_refine_outline)
+        workflow.add_node('ArticleGenerator', self.generate_article)
+        workflow.set_entry_point("TopicGetter")
+
+        workflow.add_edge("TopicGetter", "PerspectivesGenerator")
+        workflow.add_edge("PerspectivesGenerator", "ConversationGenerator")
+        workflow.add_edge("ConversationGenerator", "RefineOutlineGenerator")
+        workflow.add_edge("RefineOutlineGenerator", "ArticleGenerator")
+        workflow.add_edge("ArticleGenerator", END)
+        return workflow
+
+
+
+
+# if __name__ == "__main__":
+#     summarizer = BilibiliSummarizer()
+#     workflow = summarizer.create_workflow()
+
+#     id = "BV1tz421i7PT"
+#     input = {
+#         "id": id,
+#     }
+
+#     graph = workflow.compile()
+#     events = graph.stream(input)
+
+#     from IPython.display import Image, display
+#     display(Image(graph.get_graph().draw_mermaid_png()))
+
+#     for s in events:
+#         print(s)
+#         print("----")
+
+
+from config import TOPIC
+if __name__ == "__main__":
+    markdown = MarkdownGenerator()
+    workflow = markdown.generate_markdown()
+
+    id = "BV1tz421i7PT"
     input = {
         "id": id,
     }
 
     graph = workflow.compile()
-    events = graph.stream(input)
 
     from IPython.display import Image, display
     display(Image(graph.get_graph().draw_mermaid_png()))
 
-    for s in events:
-        print(s)
-        print("----")
+    async def process_events(events):
+        async for s in events:
+            print(s)
+            print("----")
+
+    # 新建事件循环并运行 process_events 函数
+    import asyncio
+    asyncio.run(process_events(graph.astream(input)))

@@ -1,9 +1,17 @@
+import os
+from uuid import uuid4
+unique_id = uuid4().hex[0:8]
 
-from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from config import OLD_OUTLINE, TOPIC, CONVERSATION
+from langchain_openai import ChatOpenAI
+
 from langchain_core.pydantic_v1 import BaseModel, Field
 from typing import List, Optional
+from config import MESSAGE, OLD_OUTLINE
+from database import Database
+DATABASE_PATH = '/Users/mins/Desktop/github/bilibili_summarize/db/sqlite/bilibili.db'
+
+long_context_llm = ChatOpenAI(model="gpt-4-turbo-preview")
 
 class Subsection(BaseModel):
     subsection_title: str = Field(..., title="Title of the subsection")
@@ -31,6 +39,7 @@ class Section(BaseModel):
         return f"## {self.section_title}\n\n{self.description}\n\n{subsections}".strip()
 
 
+
 class Outline(BaseModel):
     page_title: str = Field(..., title="Title of the Wikipedia page")
     sections: List[Section] = Field(
@@ -43,20 +52,26 @@ class Outline(BaseModel):
         sections = "\n\n".join(section.as_str for section in self.sections)
         return f"# {self.page_title}\n\n{sections}".strip()
 
-class WikipediaOutlineRefiner:
-    def __init__(self, llm):
-        self.llm = llm
-        self.refine_outline_prompt = ChatPromptTemplate.from_messages(
+
+class RefineOutline():
+    def __init__(self, conversations, id: str, topic: str):
+        self.db = Database(DATABASE_PATH)
+        self.id = id
+        self.topic = topic
+        self.conversations = conversations
+
+    def generate_refine_outline(self):
+        refine_outline_prompt = ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
                     """You are a Wikipedia writer. You have gathered information from experts and search engines. Now, you are refining the outline of the Wikipedia page. \
-                    You need to make sure that the outline is comprehensive and specific. \
-                    Topic you are writing about: {topic} 
-
-                    Old outline:
-
-                    {old_outline}""",
+        You need to make sure that the outline is comprehensive and specific. \
+        Topic you are writing about: {topic} 
+        
+        Old outline:
+        
+        {old_outline}""",
                 ),
                 (
                     "user",
@@ -65,35 +80,26 @@ class WikipediaOutlineRefiner:
             ]
         )
 
-        self.refine_outline_chain = self.refine_outline_prompt | self.llm.with_structured_output(
-           Outline
+        refine_outline_chain = refine_outline_prompt | long_context_llm.with_structured_output(
+            Outline
         )
-    
-    def refine_outline(self, topic, old_outline, conversations):
-        # formatted_conversations = "\n\n".join(
-        #     f"### {name}\n\n{content}" for name, content in conversations.items()
-        # )
-        formatted_conversations = conversations
-        print(formatted_conversations)
-        result = self.refine_outline_chain.invoke(
+
+        refined_outline = refine_outline_chain.invoke(
             {
-                "topic": topic,
-                "old_outline": old_outline,
-                "conversations": formatted_conversations,
+                "topic": self.topic,
+                "old_outline": OLD_OUTLINE,
+                "conversations": self.conversations,
+                # "conversations": "\n\n".join(
+                #     f"### {m.name}\n\n{m.content}" for m in self.conversations
+                # ),
             }
         )
 
-        # for token in result:
-        #     print("---")
-        #     print(token)
-        
-        return result
+        self.db.update('dynamic', 'refine_outline_md = ?', 'id = ?', (refined_outline, self.id))
 
+        return refined_outline
 
-# Example usage
-llm = ChatOpenAI(model="gpt-4o")
-refiner = WikipediaOutlineRefiner(llm)
-
-print("===")
-refined_outline = refiner.refine_outline(TOPIC, OLD_OUTLINE, CONVERSATION)
-print("refined_outline:", refined_outline)
+if __name__ == "__main__":
+    refine_outline = RefineOutline(MESSAGE)
+    res = refine_outline.generate_refine_outline()
+    print("==:",res)

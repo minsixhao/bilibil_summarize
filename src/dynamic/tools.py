@@ -17,6 +17,7 @@ import httpx
 import os
 import json
 import time
+from pydub import AudioSegment
 
 DATABASE_PATH = '/Users/mins/Desktop/github/bilibili_summarize/db/sqlite/bilibili.db'
 BASE_URL = '/Users/mins/Desktop/github/bilibili_summarize/static'
@@ -214,16 +215,30 @@ class DyanmicTools:
                 temp_audio_file.write(audio_data[0][0])
                 temp_audio_file_path = temp_audio_file.name
 
-            with open(temp_audio_file_path, "rb") as audio_file:
-                transcript = client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                    response_format="json"
-                )
-            print(transcript)
-            content = transcript.text
+            audio_file = AudioSegment.from_file(temp_audio_file_path)
+            chunk_size = 100 * 1000  # 100秒
+            chunks = [audio_file[i:i+chunk_size] for i in range(0, len(audio_file), chunk_size)]
 
-            self.db.update("dynamic", "content = ?", "id = ?", (content, id))
+            transcript = ""
+            for chunk in chunks:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_chunk_file:
+                    chunk.export(temp_chunk_file.name, format="wav")
+                    with open(temp_chunk_file.name, "rb") as f:
+                        prompt='以下是普通话的句子'
+                        result = client.audio.transcriptions.create(
+                            model="whisper-1",
+                            file=f,
+                            response_format="json",
+                            language="zh",
+                            prompt=prompt
+                        )
+                        print(result)
+                    transcript += result.text
+
+            print(transcript)
+
+            self.db.update("dynamic", "content = ?", "id = ?", (transcript, id))
+
         except Exception as e:
             raise Exception(f"OpenAI API 错误: {e}")
         finally:
