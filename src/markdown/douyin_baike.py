@@ -2,8 +2,6 @@ import requests
 import json
 import os
 
-from config import TOPICS_KEYWORDS
-
 class DouyinBaikeAPI:
     def __init__(self):
         self.base_url = 'https://www.baike.com/api/v2/search/getDocData'
@@ -12,7 +10,7 @@ class DouyinBaikeAPI:
             "Accept-Encoding": "gzip, deflate, br, zstd",
             "Accept-Language": "zh-CN,zh;q=0.9",
             "Content-Type": "application/json",
-            "Cookie": "ttwid=1|-trngjRzjW2k6vi06aa8EFwe5gXCRl7nIjt6MwZ0TNM|1713013578|f0f92007333d9841bf7e75aae9e86ec04829ae82de54d35e95b5746b9e02874e; ttwid_ss=1|-trngjRzjW2k6vi06aa8EFwe5gXCRl7nIjt6MwZ0TNM|1713013578|f0f92007333d9841bf7e75aae9e86ec04829ae82de54d35e95b5746b9e02874e; COOKIE_IS_LOGIN_FLAG=0; COOKIE_IS_LOGIN_FLAG=0; first_screen_node_count=5; msToken=s9JRA0Y5irso50Gb1C8813qaa_Deii7eA9YTRjCpJ_YUQ364OmL0HzZTePlK6m0vISHiuXCG3ImpbxBe6fYs7eCEaJTD1eQbofYpCyIx; view_id=202407021901157662379914F81C9827E4; timestamp=1719918075726",
+            "Cookie": "refresh=true; ttwid=1|-trngjRzjW2k6vi06aa8EFwe5gXCRl7nIjt6MwZ0TNM|1713013578|f0f92007333d9841bf7e75aae9e86ec04829ae82de54d35e95b5746b9e02874e; ttwid_ss=1|-trngjRzjW2k6vi06aa8EFwe5gXCRl7nIjt6MwZ0TNM|1713013578|f0f92007333d9841bf7e75aae9e86ec04829ae82de54d35e95b5746b9e02874e; COOKIE_IS_LOGIN_FLAG=0; COOKIE_IS_LOGIN_FLAG=0; first_screen_node_count=5; view_id=202407241514285FA48E17AED666980568; timestamp=1721805268824",
             "Origin": "https://www.baike.com",
             "Referer": "https://www.baike.com/search?keyword=%E9%98%BF%E6%96%AF%E9%A1%BF%E5%8F%91%E9%80%81%E5%88%B0%E5%8F%91&activeTab=DOC_TAB",
             "Sec-Ch-Ua": "\"Not/A)Brand\";v=\"8\", \"Chromium\";v=\"126\", \"Google Chrome\";v=\"126\"",
@@ -22,10 +20,8 @@ class DouyinBaikeAPI:
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Site": "same-origin",
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-            "X-Build-Version": "1.0.1.8369",
-            "X-View-Id": "2024070218564614EA06B977FC39BB65F6"
+            "X-Build-Version": "1.0.1.8724",
         }
-
 
     def get_document_data(self, query, start=0, count=2):
         payload = {
@@ -48,8 +44,7 @@ class DouyinBaikeAPI:
 
     def download_html(self, file_id: str):
         try:
-
-            directory='/Users/mins/Desktop/github/bilibili_summarize/static/html'
+            directory = '/Users/mins/Desktop/github/bilibili_summarize/static/html'
             url = f"https://www.baike.com/wikiid/{file_id}"
             response = requests.get(url, headers=self.headers)
             if response.status_code == 200:
@@ -64,7 +59,6 @@ class DouyinBaikeAPI:
         except Exception as e:
             raise e
 
-
 from langchain_community.document_loaders import BSHTMLLoader
 class LoadHtmlFile():
     def __init__(self):
@@ -74,25 +68,35 @@ class LoadHtmlFile():
         file_path = os.path.join(self.directory, f"{file_id}.html")
         loader = BSHTMLLoader(file_path)
         data = loader.load()
-
         return data
+
+from langchain_community.document_loaders import AsyncHtmlLoader
+from langchain_community.document_transformers import Html2TextTransformer
+class Html2Text():
+    def __init__(self):
+        self.directory = []
+
+    def docs_transformed(self):
+        urls = ["https://www.baike.com/wikiid/7176566420128727096", "https://www.baike.com/wikiid/7153244797457072159"]
+        loader = AsyncHtmlLoader(urls)
+        docs = loader.load()
+        html2text = Html2TextTransformer()
+        docs_transformed = html2text.transform_documents(docs)
+        print(docs_transformed)
 
 
 if __name__ == "__main__":
-    # 使用示例
     api = DouyinBaikeAPI()
     load = LoadHtmlFile()
     try:
-        # first_doc_id = api.get_document_data("韩非子")
-        # print("Search request sent successfully:", first_doc_id)
-        # if first_doc_id is not None:
-        #     print(f"First document ID: {first_doc_id}")
-
-        id = '5941342419711581473'
+        id = '7198178132255785017'
         api.download_html(id)
-
-        load.load_html('5941342419711581473')
+        data = load.load_html(id)
+        print(data)
 
     except Exception as e:
         print(e)
 
+    # API = Html2Text()
+    # res = API.docs_transformed()
+    # print(res)

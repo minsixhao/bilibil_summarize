@@ -122,7 +122,7 @@ class SummaryMarkdown:
         return rlt.summary_markdown
 
 
-class TopicMarkdown:
+class TopicsMarkdown:
 
     def __init__(self):
         """Initialize the database connection."""
@@ -238,6 +238,69 @@ class KeyWordMarkdown:
 
 
 
+class TopicMarkdown:
+    def __init__(self):
+        """Initialize the database connection."""
+        self.db = Database(DATABASE_PATH)
+
+    def generate_topic(self, topics_keywords: str, id: str):
+        """Generate a topic from the topic_keywords."""
+        # return self.db.get_topic(topic)
+        llm = ChatOpenAI(temperature=0, model_name="gpt-4o")
+
+        prompt_template = ChatPromptTemplate.from_messages([
+            (
+                "system",
+                """
+        
+                您是一位专业的信息整合专家，擅长将复杂的信息和关键词转化为详细且吸引人的主题描述。您将接收一个包含多个主题和关键词的字符串 topics_keywords。您的任务是深入分析这些信息，并提炼出一个清晰、准确、全面且具有吸引力的主题描述。
+
+                输入：
+                topics_keywords 字符串： {topics_keywords}
+
+                任务要求：
+
+                深入分析：对输入字符串中的每个主题和关键词进行深入分析，确保主题描述能够全面反映这些要点。
+                详细性：提供足够的细节和背景信息，使主题描述丰富而具体，但同时保持清晰和条理。
+                相关性：确保主题描述与输入的关键词紧密相关，能够准确传达信息内容和上下文。
+                创造性：在保持相关性的同时，尝试创造性地组合关键词和信息，以产生新颖且有吸引力的主题描述。
+                通用性：考虑主题描述在不同上下文中的适用性，确保它在相关领域内具有广泛的认知度。
+                易于理解：确保主题描述易于理解，避免使用过于专业或晦涩的术语，除非它们对于描述是必要的。
+                记忆点：在主题描述中嵌入易于记忆的元素，如引人入胜的开头、有力的结论或引人注目的统计数据。
+                输出：
+                提供一个不少于 50 字符合上述要求的主题描述，它应该能够为读者提供对主题的全面理解，并激发他们的兴趣。
+                """
+            ),
+            (
+                "user",
+                """
+                {topics_keywords}
+                """
+            )
+        ])
+
+
+        class Topic(BaseModel):
+            """ 生成主题 """
+            topic: str = Field(
+                description="整合输入字符串中的主题和关键词，生成一个清晰、准确、全面且具有吸引力的主题描述。",
+            )
+
+        chain = prompt_template | llm.with_structured_output(Topic)
+        print("kk:", topics_keywords)
+        rlt = chain.invoke({"topics_keywords": topics_keywords})
+        self.db.update('dynamic', 'topic = ?', 'id = ?', (rlt.topic, id))
+
+        print(rlt.topic)
+
+        return rlt.topic
+
+
+from langchain.globals import set_verbose
+
+# set_verbose(True)
+# topic = TopicMarkdown().generate_topic(['林则徐的早年生活', '林则徐的仕途初期', '林则徐的科举成功与仕途发展', '林则徐的禁毒与虎门硝烟', '第一次鸦片战争', '林则徐的流放与晚年', '林则徐的精神与遗志'] + ['林则徐', '鸦片战争', '虎门硝烟', '福建福州', '马加尔尼使团', '清政府闭关锁国', '秀才', '敖丰书院', '张诗成', '进士', '汉林院', '兵备党', '广州', '鸦片', '第一次鸦片战争', '英国远征军', '《南京条约》', '伊犁', '屯垦', '陕甘总督', '钦差大臣', '爱国主义精神', '民族气节'], id)
+# print("asdasd:",topic)
 # class RelatedSubjects(BaseModel):
 #     gen_related_topics_prompt = ChatPromptTemplate.from_template(
 #         """I'm writing a Wikipedia page for a topic mentioned below. Please identify and recommend some Wikipedia pages on closely related subjects. I'm looking for examples that provide insights into interesting aspects commonly associated with this topic, or examples that help me understand the typical content and structure included in Wikipedia pages for similar topics.
