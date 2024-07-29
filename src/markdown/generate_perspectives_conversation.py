@@ -14,7 +14,9 @@ from langchain_community.utilities.duckduckgo_search import DuckDuckGoSearchAPIW
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 from langchain_community.tools import DuckDuckGoSearchResults
-from config import OLD_OUTLINE
+from config import OLD_OUTLINE, DATABASE_PATH
+from database import Database
+
 import re
 
 class Editor(BaseModel):
@@ -44,6 +46,7 @@ class Perspectives(BaseModel):
 
 class PerspectiveGenerator:
     def __init__(self):
+        self.db = Database(DATABASE_PATH)
         self.gen_perspectives_prompt = ChatPromptTemplate.from_messages(
             [
                 (
@@ -56,9 +59,10 @@ class PerspectiveGenerator:
                 ("user", "感兴趣的主题: {topic}"),
             ]
         )
-        self.gen_perspectives_chain = (self.gen_perspectives_prompt | ChatOpenAI(model="gpt-3.5-turbo").with_structured_output(Perspectives))
-    async def generate_perspectives(self, topic: str):
-        formatted = OLD_OUTLINE
+        self.gen_perspectives_chain = (self.gen_perspectives_prompt | ChatOpenAI(model="gpt-4o").with_structured_output(Perspectives))
+    async def generate_perspectives(self, topic: str, id: str):
+        old_outline = self.db.query("dynamic", "summary_md", "id = ?", (id,))
+        formatted = old_outline
         return await self.gen_perspectives_chain.ainvoke({"examples": formatted, "topic": topic})
 
 
@@ -111,7 +115,7 @@ class AnswerWithCitations(BaseModel):
 class InterviewSystem:
     def __init__(self):
         self.fast_llm = ChatOpenAI(model="gpt-4o")
-        self.max_num_turns = 5
+        self.max_num_turns = 3
         self.wrapper = DuckDuckGoSearchAPIWrapper(region="cn-zh", max_results=10)
         self.search = DuckDuckGoSearchResults(api_wrapper=self.wrapper, source="news")
 
@@ -157,7 +161,6 @@ class InterviewSystem:
         return {"messages": converted}
 
     async def generate_question(self, state: InterviewState):
-        # print("=====进入提问generate：state:", state)
         editor = state["editor"]
         gn_chain = (
                 RunnableLambda(self.swap_roles).bind(name=editor.name)
@@ -334,5 +337,13 @@ async def main():
 
 if __name__ == "__main__":
     # Run the main function
-    import asyncio
-    asyncio.run(main())
+    # import asyncio
+    # asyncio.run(main())
+
+    db = Database(DATABASE_PATH)
+    id = 'BV1tz421i7PT'
+    exists = db.query("dynamic", "COUNT(*)", "id = ?", (id,))[0][0]
+    outline_data = db.query("dynamic", "summary_md", "id = ?", (id,))
+
+    print(exists)
+    print(outline_data)

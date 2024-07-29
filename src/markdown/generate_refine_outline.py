@@ -11,7 +11,7 @@ from config import MESSAGE, OLD_OUTLINE
 from database import Database
 DATABASE_PATH = '/Users/mins/Desktop/github/bilibili_summarize/db/sqlite/bilibili.db'
 
-long_context_llm = ChatOpenAI(model="gpt-4-turbo-preview")
+long_context_llm = ChatOpenAI(model="gpt-4o")
 
 class Subsection(BaseModel):
     subsection_title: str = Field(..., title="Title of the subsection")
@@ -59,23 +59,41 @@ class RefineOutline():
         self.id = id
         self.topic = topic
         self.conversations = conversations
+        self.old_outline = self.db.query("dynamic", "summary_md", "id = ?", (id,))
 
     def generate_refine_outline(self):
         refine_outline_prompt = ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
-                    """You are a Wikipedia writer. You have gathered information from experts and search engines. Now, you are refining the outline of the Wikipedia page. \
-        You need to make sure that the outline is comprehensive and specific. \
-        Topic you are writing about: {topic} 
+                    """作为维基百科的编辑，你负责撰写和完善特定主题的页面。你已经从领域专家和搜索引擎中搜集了相关资料。现在，你需要根据这些资料和专家的见解，进一步细化和完善维基百科页面的大纲。 \
+                    主题： {topic} 
+
+                    请遵循以下步骤来优化大纲：
+                    1. 确保大纲覆盖了主题的所有关键方面。
+                    2. 使用清晰的标题和子标题来组织内容。
+                    3. 包含必要的引用和参考资料链接。
+                    4. 保持语言的客观性和准确性。
+                    5. 内容详尽无遗，深入挖掘主题每个层面，确保每一部分经过精心构思和充分扩展。
+                            
+                    旧的大纲:
         
-        Old outline:
-        
-        {old_outline}""",
+                    {old_outline}
+                    """,
                 ),
                 (
                     "user",
-                    "Refine the outline based on your conversations with subject-matter experts:\n\nConversations:\n\n{conversations}\n\nWrite the refined Wikipedia outline:",
+                    """
+                    根据与领域专家的深入对话和进一步的研究，以下是对维基百科页面大纲的优化建议:
+
+
+                    对话摘要:
+                    
+                    {conversations}
+                    
+                    
+                    你优化后的维基百科页面大纲：
+                    """,
                 ),
             ]
         )
@@ -87,11 +105,8 @@ class RefineOutline():
         refined_outline = refine_outline_chain.invoke(
             {
                 "topic": self.topic,
-                "old_outline": OLD_OUTLINE,
+                "old_outline": self.old_outline,
                 "conversations": self.conversations,
-                # "conversations": "\n\n".join(
-                #     f"### {m.name}\n\n{m.content}" for m in self.conversations
-                # ),
             }
         )
 

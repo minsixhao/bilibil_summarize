@@ -5,13 +5,11 @@ unique_id = uuid4().hex[0:8]
 os.environ['http_proxy'] = 'http://127.0.0.1:7890'
 os.environ['https_proxy'] = 'http://127.0.0.1:7890'
 os.environ["OPENAI_API_KEY"] = "sk-"
-os.environ["LANGCHAIN_API_KEY"] = "lsv2_pt_4"
+os.environ["LANGCHAIN_API_KEY"] = "="
 os.environ["TAVILY_API_KEY"] = "tvly-"
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_PROJECT"] = f"Tracing Walkthrough - {unique_id}"
 os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
-os.environ["LANGCHAIN_API_KEY"] = ""
-os.environ["TAVILY_API_KEY"] = "tvly-"
 
 
 DATABASE_PATH = '/Users/mins/Desktop/github/bilibili_summarize/db/sqlite/bilibili.db'

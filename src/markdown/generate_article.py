@@ -87,10 +87,10 @@ class GenerateSections():
             [
                 (
                     "system",
-                    "您是一位专业的维基百科作者。请根据以下维基百科大纲重写指定的章节。请保留大纲中其他章节的现有内容不变。\n\n"
-                    "维基百科大纲：\n\n{outline}\n\n对于您需要重写的章节，请确保使用以下参考资料来丰富内容：\n\n{docs}\n",
+                    "您是一位专业的维基百科编辑。请根据如下维基百科大纲重写指定的章节。在修改过程中，请务必遵守大纲的结构和内容，不删除大纲中的其他章节，同时允许您对现有内容进行适当的调整和补充，以提高其准确性和丰富度。\n\n"
+                    "维基百科大纲：\n\n{outline}\n\n为了使您撰写的章节更加详细和权威，请使用以下参考资料丰富内容：\n\n{docs}\n",
                 ),
-                ("user", "请为{section}章节编写详细，丰富，完整的维基百科章节内容。"),
+                ("user", "请为章节 {section} 编写一个详细且完备的维基百科内容。"),
             ]
         )
 
@@ -98,7 +98,7 @@ class GenerateSections():
         async def retrieve(inputs: dict):
             print("reference:",self.references)
             retriever = Retriever(self.references).create()
-            docs = await retriever.ainvoke(inputs["topic"] + ": " + inputs["section"])
+            docs = await retriever.ainvoke(inputs["section"])
 
             formatted = "\n".join(
                 [
@@ -107,16 +107,18 @@ class GenerateSections():
                 ]
             )
 
-            sources = [doc.metadata['source'] for doc in docs if 'source' in doc.metadata]
-            sourceReader = JinaAI()
-            formatted = ""
-            for source in sources:
-                content = sourceReader.reader(source)
-                with open(MILVUSLOADPTAH, 'w', encoding='utf-8') as file:
-                    file.write(content)
-                m = MilvusLoadRetrieval()
-                m.load()
-                retrieve_content = m.retrieval(inputs["section"])
+            m = MilvusLoadRetrieval()
+            m.load()
+            # sources = [doc.metadata['source'] for doc in docs if 'source' in doc.metadata]
+            # sourceReader = JinaAI()
+            # for source in sources:
+                # content = sourceReader.reader(source)
+                # with open(MILVUSLOADPTAH, 'w', encoding='utf-8') as file:
+                #     file.write(content)
+
+            for doc in docs:
+                source_content = doc.page_content
+                retrieve_content = m.retrieval(inputs["section"] + source_content, 3)
                 formatted += retrieve_content
 
 
@@ -144,11 +146,12 @@ class GenerateSections():
         return section.as_str
 
 class GenerateArticle():
-    def __init__(self, topic: str, draft: str):
+    def __init__(self, id: str ,topic: str, draft: str, references):
         self.db = Database(DATABASE_PATH)
         self.id = id
         self.topic = topic
         self.draft = draft
+        self.references = references
 
     async def generate_article(self):
 
@@ -161,6 +164,8 @@ class GenerateArticle():
                     
                     
                     草稿:{draft}\n\n
+
+                    维基百科的引用链接:{references}
                     
                     要求：严格遵守维基百科格式指南，根据草稿内容，调整它生成完整的维基百科文章，只能增加描述丰富内容,不可以漏掉草稿的内容
                     """
@@ -174,7 +179,7 @@ class GenerateArticle():
         )
         print("---- 草稿：", self.draft)
         writer = writer_prompt | long_context_llm | StrOutputParser()
-        article = await writer.ainvoke({"topic": self.topic, "draft": self.draft})
+        article = await writer.ainvoke({"topic": self.topic, "draft": self.draft, "references": self.references})
         print("--- 生成的文章：", article)
         self.db.update('dynamic', 'refine_content_md = ?', 'id = ?', (article, self.id))
         return article

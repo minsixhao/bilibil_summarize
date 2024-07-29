@@ -19,7 +19,7 @@ class MilvusLoadRetrieval:
         # 加载文档
         loader = TextLoader(self.milvus_load_path)
         documents = loader.load()
-        text_splitter = CharacterTextSplitter(chunk_size=200, chunk_overlap=0)
+        text_splitter = CharacterTextSplitter(chunk_size=400, chunk_overlap=0)
         docs = text_splitter.split_documents(documents)
         embeddings = OpenAIEmbeddings()
         self.vector_db = Milvus.from_documents(
@@ -28,40 +28,45 @@ class MilvusLoadRetrieval:
             connection_args={"uri": self.milvus_path},
         )
 
-    def retrieval(self, query):
-        docs = self.vector_db.similarity_search(query, 2)
-        content = docs[0].page_content + '\n\n' + docs[1].page_content
+    def retrieval(self, query: str, k: int):
+        docs = self.vector_db.similarity_search(query, k)
+        content = ''
+        for doc in docs:
+            content += doc.page_content + '\n\n'
         return content
-# sourceReader = JinaAI()
-# content = sourceReader.url_summary('https://www.sohu.com/a/656087478_121123846')
-# print(content)
-# # 将 content 写入文件
-# with open(MILVUSPATH, 'w', encoding='utf-8') as file:
-#     file.write(content)
+
+
+if __name__ == "__main__":
+    # sourceReader = JinaAI()
+    # content = sourceReader.url_summary('https://www.sohu.com/a/656087478_121123846')
+    # print(content)
+    # # 将 content 写入文件
+    # with open(MILVUSPATH, 'w', encoding='utf-8') as file:
+    #     file.write(content)
 
 
 
-# loader = TextLoader(self.milvus_load_path)
-# documents = loader.load()
-# text_splitter = CharacterTextSplitter(chunk_size=400, chunk_overlap=40)
-# docs = text_splitter.split_documents(documents)
+    # loader = TextLoader(self.milvus_load_path)
+    # documents = loader.load()
+    # text_splitter = CharacterTextSplitter(chunk_size=400, chunk_overlap=40)
+    # docs = text_splitter.split_documents(documents)
 
-# embeddings = OpenAIEmbeddings()
+    # embeddings = OpenAIEmbeddings()
 
-# URI = "/Users/mins/Desktop/github/bilibili_summarize/db/milvus/milvus.db"
+    # URI = "/Users/mins/Desktop/github/bilibili_summarize/db/milvus/milvus.db"
 
-# vector_db = Milvus.from_documents(
-#     docs,
-#     embeddings,
-#     connection_args={"uri": URI},
-# )
+    # vector_db = Milvus.from_documents(
+    #     docs,
+    #     embeddings,
+    #     connection_args={"uri": URI},
+    # )
 
-# query = "早年生活"
-# docs = vector_db.similarity_search(query)
-# print(docs)
-# docs[0].page_content
+    query = "早年生活"
+    docs = vector_db.similarity_search(query)
+    print(docs)
+    docs[0].page_content
 
-# m =  MilvusLoadRetrieval()
-# m.load()
-# res = m.retrieval("早年生活")
-# print(res)
+    m =  MilvusLoadRetrieval()
+    m.load()
+    res = m.retrieval("早年生活", 4)
+    print(res)

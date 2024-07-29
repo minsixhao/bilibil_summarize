@@ -143,7 +143,6 @@ class MarkdownState(TypedDict):
 
 class MarkdownGenerator:
     def __init__(self):
-        self.id = str
         self.db = Database(DATABASE_PATH)
 
     def get_topic(self, state: State):
@@ -154,8 +153,9 @@ class MarkdownGenerator:
     #     keywords = state['keywords']
 
     async def generate_perspectives(self, state: MarkdownState):
+        id = state['id']
         topic = state['topic']
-        perspectives = await PerspectiveGenerator().generate_perspectives(topic)
+        perspectives = await PerspectiveGenerator().generate_perspectives(topic, id)
         return {"perspectives": perspectives}
 
     async def generate_conversation(self, state: MarkdownState):
@@ -176,11 +176,9 @@ class MarkdownGenerator:
                 ],
             }
             ask_answer = await interview_graph.ainvoke(initial_state)
-            # conversation +=  "\n\n".join(
-            #     f"### {m.name}\n\n{m.content}" for m in res["messages"]
-            # )
 
             # 聚合对话消息
+            # conversations 向量检索
             conversations += ask_answer["messages"]
             for key, value in ask_answer.get("references", {}).items():
                 merged_references[key] = value
@@ -198,6 +196,7 @@ class MarkdownGenerator:
         refine_outline = state['refine_outline']
         references = state['references']
         topic = state['topic']
+        id = state['id']
 
         print("refine_outline:", refine_outline)
         print("refine_outline.sections:", refine_outline.sections)
@@ -210,7 +209,7 @@ class MarkdownGenerator:
             sections += '\n\n' + section
             print('-- generate_article sections:', sections)
 
-        gen_article = GenerateArticle(topic, sections)
+        gen_article = GenerateArticle(id, topic, sections, references)
         article = await gen_article.generate_article()
         return {"article": article}
 
@@ -232,7 +231,7 @@ class MarkdownGenerator:
 
 
 
-
+# 运行下面代码，对 id 对应的视频进行总结，并生成 markdown 文件是，摘要 md 大纲， 提炼主题和关键字
 # if __name__ == "__main__":
 #     summarizer = BilibiliSummarizer()
 #     workflow = summarizer.create_workflow()
@@ -253,6 +252,7 @@ class MarkdownGenerator:
 #         print("----")
 
 
+# 运行下面代码，对 id 对应的视频进行深入研究，生成一篇 markdown 文档
 from config import TOPIC
 if __name__ == "__main__":
     markdown = MarkdownGenerator()
