@@ -14,10 +14,8 @@
 - 深入研究成果 Markdown 文档: [林则徐
   ](/docs/article.md)
 
-- langsmith 运行状态分享链接：
+- 上一步 langsmith 运行状态链接：
   https://smith.langchain.com/public/0d38e2cf-18c2-4a02-8ffa-1239edd6e96b/r
-
-![alt text](image-2.png)
 
 ![alt text](image-3.png)
 
