@@ -11,7 +11,7 @@ unique_id = uuid4().hex[0:8]
 DATABASE_PATH = '/Users/mins/Desktop/github/bilibili_summarize/db/sqlite/bilibili.db'
 BASE_URL = '/Users/mins/Desktop/github/bilibili_summarize/static'
 COOKIE_PATH = '/bilibili_summarize/cookie/cookie.json'
-os.environ["OPENAI_API_KEY"] = "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"
+os.environ["OPENAI_API_KEY"] = "sk-"
 
 
 class MyState(TypedDict):
