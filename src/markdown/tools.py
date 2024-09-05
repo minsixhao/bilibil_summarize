@@ -10,18 +10,20 @@ from config import *
 
 DATABASE_PATH = '/Users/mins/Desktop/github/bilibili_summarize/db/sqlite/bilibili.db'
 
-class GenerateMarkdown:
-
+class BaseMarkdownProcessor:
     def __init__(self):
-        """Initialize the database connection."""
         self.db = Database(DATABASE_PATH)
+        self.llm = ChatOpenAI(temperature=0, model_name="gpt-4o")
 
+    def _invoke_chain(self, prompt_template, input_data, output_model):
+        chain = prompt_template | self.llm.with_structured_output(output_model)
+        return chain.invoke(input_data)
+
+class GenerateMarkdown(BaseMarkdownProcessor):
     def content_2_markdown(self, content: str, id: str):
         """
         content 文本转换成 markdown 文档
         """
-
-        llm = ChatOpenAI(temperature=0, model_name="gpt-4o")
 
         prompt_template = ChatPromptTemplate.from_messages([
             (
@@ -55,30 +57,17 @@ class GenerateMarkdown:
             )
         ])
 
-        # class Markdown(BaseModel):
-        #     markdown: str = Field(description="转换后的 markdown 文档。")
-
         output_parser = StrOutputParser()
-        chain = prompt_template | llm | output_parser
+        chain = prompt_template | self.llm | output_parser
         rlt = chain.invoke({"content": content})
-        print(rlt)
         self.db.update('dynamic', 'content_md = ?', 'id = ?', (rlt, id))
         return rlt
-        # self.db.update('dynamic', 'content_md = ?', 'id = ?', (rlt.markdown, id))
-        # return rlt.markdown
 
-
-class SummaryMarkdown:
-    def __init__(self):
-        """Initialize the database connection."""
-        self.db = Database(DATABASE_PATH)
-
+class SummaryMarkdown(BaseMarkdownProcessor):
     def summary_markdown(self, markdown: str, id: str):
         """
         摘要精简 markdown 文档
         """
-
-        llm = ChatOpenAI(temperature=0, model_name="gpt-4o")
 
         prompt_template = ChatPromptTemplate.from_messages([
             (
@@ -108,31 +97,21 @@ class SummaryMarkdown:
             )
         ])
 
-
         class SummaryMarkdown(BaseModel):
             """摘要markdown文档"""
             summary_markdown: str = Field(
                 description="摘要后的 markdown 文档。",
             )
 
-        chain = prompt_template | llm.with_structured_output(SummaryMarkdown)
-
-        rlt = chain.invoke({"markdown": markdown})
+        rlt = self._invoke_chain(prompt_template, {"markdown": markdown}, SummaryMarkdown)
         self.db.update('dynamic', 'summary_md = ?', 'id = ?', (rlt.summary_markdown, id))
         return rlt.summary_markdown
 
-
-class TopicsMarkdown:
-
-    def __init__(self):
-        """Initialize the database connection."""
-        self.db = Database(DATABASE_PATH)
+class TopicsMarkdown(BaseMarkdownProcessor):
     def generate_topics(self, markdown: str, id: str):
         """
         对的精简 markdown 文档进行主题提炼
         """
-
-        llm = ChatOpenAI(temperature=0, model_name="gpt-4o")
 
         prompt_template = ChatPromptTemplate.from_messages([
                 (
@@ -167,21 +146,14 @@ class TopicsMarkdown:
                 default_factory=list
             )
 
-        chain = prompt_template | llm.with_structured_output(Topics)
-
-        rlt = chain.invoke({"markdown": markdown})
+        rlt = self._invoke_chain(prompt_template, {"markdown": markdown}, Topics)
         return rlt.topics
 
-class KeyWordMarkdown:
-    def __init__(self):
-        """Initialize the database connection."""
-        self.db = Database(DATABASE_PATH)
+class KeyWordMarkdown(BaseMarkdownProcessor):
     def generate_keywords(self, markdown: str, id: str):
         """
         对摘要进行提炼主题
         """
-
-        llm = ChatOpenAI(temperature=0, model_name="gpt-4o")
 
         prompt_template = ChatPromptTemplate.from_messages([
             (
@@ -221,33 +193,12 @@ class KeyWordMarkdown:
                 default_factory=list
             )
 
-        chain = prompt_template | llm.with_structured_output(Keywords)
-
-        rlt = chain.invoke({"markdown": markdown})
+        rlt = self._invoke_chain(prompt_template, {"markdown": markdown}, Keywords)
         return rlt.keywords
 
-    def test(self):
-        gen_related_topics_prompt = ChatPromptTemplate.from_template(
-            """I'm writing a Wikipedia page for a topic mentioned below. Please identify and recommend some Wikipedia pages on closely related subjects. I'm looking for examples that provide insights into interesting aspects commonly associated with this topic, or examples that help me understand the typical content and structure included in Wikipedia pages for similar topics.
-        
-        Please list the as many subjects and urls as you can.
-        
-        Topic of interest: {topic}
-        """
-        )
-
-
-
-class TopicMarkdown:
-    def __init__(self):
-        """Initialize the database connection."""
-        self.db = Database(DATABASE_PATH)
-
+class TopicMarkdown(BaseMarkdownProcessor):
     def generate_topic(self, topics_keywords: str, id: str):
         """Generate a topic from the topic_keywords."""
-        # return self.db.get_topic(topic)
-        llm = ChatOpenAI(temperature=0, model_name="gpt-4o")
-
         prompt_template = ChatPromptTemplate.from_messages([
             (
                 "system",
@@ -279,45 +230,14 @@ class TopicMarkdown:
             )
         ])
 
-
         class Topic(BaseModel):
             """ 生成主题 """
             topic: str = Field(
                 description="整合输入字符串中的主题和关键词，生成一个清晰、准确、全面且具有吸引力的主题描述。",
             )
 
-        chain = prompt_template | llm.with_structured_output(Topic)
-        print("kk:", topics_keywords)
-        rlt = chain.invoke({"topics_keywords": topics_keywords})
+        rlt = self._invoke_chain(prompt_template, {"topics_keywords": topics_keywords}, Topic)
         self.db.update('dynamic', 'topic = ?', 'id = ?', (rlt.topic, id))
-
-        print(rlt.topic)
-
         return rlt.topic
 
-
 from langchain.globals import set_verbose
-
-# set_verbose(True)
-# topic = TopicMarkdown().generate_topic(['林则徐的早年生活', '林则徐的仕途初期', '林则徐的科举成功与仕途发展', '林则徐的禁毒与虎门硝烟', '第一次鸦片战争', '林则徐的流放与晚年', '林则徐的精神与遗志'] + ['林则徐', '鸦片战争', '虎门硝烟', '福建福州', '马加尔尼使团', '清政府闭关锁国', '秀才', '敖丰书院', '张诗成', '进士', '汉林院', '兵备党', '广州', '鸦片', '第一次鸦片战争', '英国远征军', '《南京条约》', '伊犁', '屯垦', '陕甘总督', '钦差大臣', '爱国主义精神', '民族气节'], id)
-# print("asdasd:",topic)
-# class RelatedSubjects(BaseModel):
-#     gen_related_topics_prompt = ChatPromptTemplate.from_template(
-#         """I'm writing a Wikipedia page for a topic mentioned below. Please identify and recommend some Wikipedia pages on closely related subjects. I'm looking for examples that provide insights into interesting aspects commonly associated with this topic, or examples that help me understand the typical content and structure included in Wikipedia pages for similar topics.
-#
-#     Please list the as many subjects and urls as you can.
-#
-#     Topic of interest: {topic}
-#     """
-#     )
-#
-#
-#     class RelatedSubjects(BaseModel):
-#         topics: List[str] = Field(
-#             description="Comprehensive list of related subjects as background research.",
-#         )
-#
-#
-#     expand_chain = gen_related_topics_prompt | fast_llm.with_structured_output(
-#         RelatedSubjects
-#     )

@@ -72,18 +72,17 @@ class LoadHtmlFile():
 
 from langchain_community.document_loaders import AsyncHtmlLoader
 from langchain_community.document_transformers import Html2TextTransformer
-class Html2Text():
+class Html2Text:
     def __init__(self):
-        self.directory = []
+        self.urls = ["https://www.baike.com/wikiid/7176566420128727096", 
+                     "https://www.baike.com/wikiid/7153244797457072159"]
 
     def docs_transformed(self):
-        urls = ["https://www.baike.com/wikiid/7176566420128727096", "https://www.baike.com/wikiid/7153244797457072159"]
-        loader = AsyncHtmlLoader(urls)
+        loader = AsyncHtmlLoader(self.urls)
         docs = loader.load()
         html2text = Html2TextTransformer()
         docs_transformed = html2text.transform_documents(docs)
-        print(docs_transformed)
-
+        return docs_transformed
 
 if __name__ == "__main__":
     api = DouyinBaikeAPI()

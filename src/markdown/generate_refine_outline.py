@@ -1,17 +1,18 @@
 import os
 from uuid import uuid4
-unique_id = uuid4().hex[0:8]
-
+from typing import List, Optional
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
-
 from langchain_core.pydantic_v1 import BaseModel, Field
-from typing import List, Optional
-from config import MESSAGE, OLD_OUTLINE
+from config import MESSAGE
 from database import Database
-DATABASE_PATH = '/Users/mins/Desktop/github/bilibili_summarize/db/sqlite/bilibili.db'
 
-long_context_llm = ChatOpenAI(model="gpt-4o")
+# 常量定义移到文件顶部
+DATABASE_PATH = '/Users/mins/Desktop/github/bilibili_summarize/db/sqlite/bilibili.db'
+UNIQUE_ID = uuid4().hex[:8]
+
+# 使用更具描述性的模型名称
+long_context_llm = ChatOpenAI(model="gpt-4-32k")
 
 class Subsection(BaseModel):
     subsection_title: str = Field(..., title="Title of the subsection")
@@ -54,14 +55,14 @@ class Outline(BaseModel):
 
 
 class RefineOutline():
-    def __init__(self, conversations, id: str, topic: str):
+    def __init__(self, conversations: str, id: str, topic: str):
         self.db = Database(DATABASE_PATH)
         self.id = id
         self.topic = topic
         self.conversations = conversations
         self.old_outline = self.db.query("dynamic", "summary_md", "id = ?", (id,))
 
-    def generate_refine_outline(self):
+    def generate_refine_outline(self) -> Outline:
         refine_outline_prompt = ChatPromptTemplate.from_messages(
             [
                 (
@@ -110,11 +111,11 @@ class RefineOutline():
             }
         )
 
-        self.db.update('dynamic', 'refine_outline_md = ?', 'id = ?', (refined_outline, self.id))
+        self.db.update('dynamic', 'refine_outline_md = ?', 'id = ?', (refined_outline.as_str, self.id))
 
         return refined_outline
 
 if __name__ == "__main__":
-    refine_outline = RefineOutline(MESSAGE)
+    refine_outline = RefineOutline(MESSAGE, UNIQUE_ID, "示例主题")
     res = refine_outline.generate_refine_outline()
-    print("==:",res)
+    print("优化后的大纲:", res.as_str)

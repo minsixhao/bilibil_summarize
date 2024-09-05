@@ -1,72 +1,59 @@
+import os
+from typing import List
 from langchain_community.document_loaders import TextLoader
 from langchain_milvus.vectorstores import Milvus
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import CharacterTextSplitter
+import logging
 
-from config import MILVUSPATH, MILVUSLOADPTAH
+# 使用环境变量
+MILVUS_PATH = os.getenv('MILVUS_PATH')
+MILVUS_LOAD_PATH = os.getenv('MILVUS_LOAD_PATH')
 
-from url_read_search import JinaAI
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class MilvusLoadRetrieval:
-    
     def __init__(self):
-        self.milvus_path = MILVUSPATH
-        self.milvus_load_path = MILVUSLOADPTAH
+        self.milvus_path = MILVUS_PATH
+        self.milvus_load_path = MILVUS_LOAD_PATH
+        self.vector_db = None
 
-    def load(self):
-        # 加载向量库
-        # milvus = Milvus.load(self.milvus_path)
-        # 加载文档
-        loader = TextLoader(self.milvus_load_path)
-        documents = loader.load()
-        text_splitter = CharacterTextSplitter(chunk_size=400, chunk_overlap=0)
-        docs = text_splitter.split_documents(documents)
-        embeddings = OpenAIEmbeddings()
-        self.vector_db = Milvus.from_documents(
-            docs,
-            embeddings,
-            connection_args={"uri": self.milvus_path},
-        )
+    def load(self) -> None:
+        try:
+            loader = TextLoader(self.milvus_load_path)
+            documents = loader.load()
+            text_splitter = CharacterTextSplitter(chunk_size=400, chunk_overlap=0)
+            docs = text_splitter.split_documents(documents)
+            embeddings = OpenAIEmbeddings()
+            self.vector_db = Milvus.from_documents(
+                docs,
+                embeddings,
+                connection_args={"uri": self.milvus_path},
+            )
+            logger.info("Documents loaded successfully into Milvus.")
+        except Exception as e:
+            logger.error(f"Error loading documents: {e}")
+            raise
 
-    def retrieval(self, query: str, k: int):
-        docs = self.vector_db.similarity_search(query, k)
-        content = ''
-        for doc in docs:
-            content += doc.page_content + '\n\n'
-        return content
+    def retrieval(self, query: str, k: int) -> str:
+        if not self.vector_db:
+            raise ValueError("Vector database not initialized. Call load() first.")
+        try:
+            docs = self.vector_db.similarity_search(query, k)
+            return '\n\n'.join(doc.page_content for doc in docs)
+        except Exception as e:
+            logger.error(f"Error during retrieval: {e}")
+            raise
 
+def main():
+    try:
+        m = MilvusLoadRetrieval()
+        m.load()
+        res = m.retrieval("早年生活", 4)
+        print(res)
+    except Exception as e:
+        logger.error(f"An error occurred: {e}")
 
 if __name__ == "__main__":
-    # sourceReader = JinaAI()
-    # content = sourceReader.url_summary('https://www.sohu.com/a/656087478_121123846')
-    # print(content)
-    # # 将 content 写入文件
-    # with open(MILVUSPATH, 'w', encoding='utf-8') as file:
-    #     file.write(content)
-
-
-
-    # loader = TextLoader(self.milvus_load_path)
-    # documents = loader.load()
-    # text_splitter = CharacterTextSplitter(chunk_size=400, chunk_overlap=40)
-    # docs = text_splitter.split_documents(documents)
-
-    # embeddings = OpenAIEmbeddings()
-
-    # URI = "/Users/mins/Desktop/github/bilibili_summarize/db/milvus/milvus.db"
-
-    # vector_db = Milvus.from_documents(
-    #     docs,
-    #     embeddings,
-    #     connection_args={"uri": URI},
-    # )
-
-    query = "早年生活"
-    docs = vector_db.similarity_search(query)
-    print(docs)
-    docs[0].page_content
-
-    m =  MilvusLoadRetrieval()
-    m.load()
-    res = m.retrieval("早年生活", 4)
-    print(res)
+    main()

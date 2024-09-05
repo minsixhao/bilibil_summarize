@@ -42,29 +42,22 @@ editors = """
 
 
 
-from typing_extensions import TypedDict
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
-
-from langchain_core.pydantic_v1 import BaseModel, Field
-from typing import List, Optional
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from typing import List
+from langchain_core.pydantic_v1 import BaseModel
+from langchain_core.messages import AIMessage
 from generate_perspectives_conversation import Editor, InterviewState, InterviewSystem
 from generate_refine_outline import Outline
 from generate_article import WikiSection
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph, START
 
-
-class ResearchState(TypedDict):
+class ResearchState(BaseModel):
     topic: str
     outline: Outline
     editors: List[Editor]
     interview_results: List[InterviewState]
-    # The final sections output
-    sections: List[WikiSection]
-    article: str
-
+    sections: List[WikiSection] = []
+    article: str = ""
 
 import asyncio
 
@@ -150,32 +143,24 @@ async def index_references(state: ResearchState):
 
 
 async def write_sections(state: ResearchState):
-    outline = state["outline"]
+    outline = state.outline
     sections = await section_writer.abatch(
         [
             {
-                "outline": refined_outline.as_str,
+                "outline": outline.as_str,
                 "section": section.section_title,
-                "topic": state["topic"],
+                "topic": state.topic,
             }
             for section in outline.sections
         ]
     )
-    return {
-        **state,
-        "sections": sections,
-    }
-
+    state.sections = sections
+    return state
 
 async def write_article(state: ResearchState):
-    topic = state["topic"]
-    sections = state["sections"]
-    draft = "\n\n".join([section.as_str for section in sections])
-    article = await writer.ainvoke({"topic": topic, "draft": draft})
-    return {
-        **state,
-        "article": article,
-    }
+    draft = "\n\n".join([section.as_str for section in state.sections])
+    state.article = await writer.ainvoke({"topic": state.topic, "draft": draft})
+    return state
 
 
 
@@ -189,8 +174,7 @@ nodes = [
     ("write_sections", write_sections),
     ("write_article", write_article),
 ]
-for i in range(len(nodes)):
-    name, node = nodes[i]
+for i, (name, node) in enumerate(nodes):
     builder_of_storm.add_node(name, node)
     if i > 0:
         builder_of_storm.add_edge(nodes[i - 1][0], name)

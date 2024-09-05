@@ -12,13 +12,22 @@ os.environ["LANGCHAIN_PROJECT"] = f"Tracing Walkthrough - {unique_id}"
 os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
 
 
-DATABASE_PATH = '/Users/mins/Desktop/github/bilibili_summarize/db/sqlite/bilibili.db'
-BASE_URL = '/Users/mins/Desktop/github/bilibili_summarize/static'
-COOKIE_PATH = '/bilibili_summarize/cookie/cookie.json'
+import os
 
-MILVUSPATH = "/Users/mins/Desktop/github/bilibili_summarize/db/milvus/milvus.db"
-MILVUSLOADPTAH = "/Users/mins/Desktop/github/bilibili_summarize/db/load/tmp.text"
+# 数据库路径
+DATABASE_PATH = os.path.join(os.path.expanduser('~'), 'Desktop', 'github', 'bilibili_summarize', 'db', 'sqlite', 'bilibili.db')
 
+# 静态文件路径
+BASE_URL = os.path.join(os.path.expanduser('~'), 'Desktop', 'github', 'bilibili_summarize', 'static')
+
+# Cookie 文件路径
+COOKIE_PATH = os.path.join('/', 'bilibili_summarize', 'cookie', 'cookie.json')
+
+# Milvus 数据库路径
+MILVUS_PATH = os.path.join(os.path.expanduser('~'), 'Desktop', 'github', 'bilibili_summarize', 'db', 'milvus', 'milvus.db')
+
+# Milvus 加载路径
+MILVUS_LOAD_PATH = os.path.join(os.path.expanduser('~'), 'Desktop', 'github', 'bilibili_summarize', 'db', 'load', 'tmp.text')
 
 
 TOPICS_KEYWORDS = ['鲁迅的伟大', '鲁迅在当代的地位', '鲁迅的阅读与理解', '鲁迅的孤独', '鲁迅的批判性', '鲁迅的启蒙', '鲁迅的反思', '鲁迅的自我批判', '鲁迅的遗愿', '鲁迅', '伟大', '孤独', '批判性', '名言', '家喻户晓', '阅读与理解', '图腾和象征', '社会批判', '遗愿', '2024年', '社会变好']

@@ -47,23 +47,21 @@ class Perspectives(BaseModel):
 class PerspectiveGenerator:
     def __init__(self):
         self.db = Database(DATABASE_PATH)
-        self.gen_perspectives_prompt = ChatPromptTemplate.from_messages(
-            [
-                (
-                    "system",
-                    """你需要选择一组多样化（且不同）的维基百科编辑，他们将共同努力创建一个关于该主题的全面文章。每个人代表与该主题相关的不同观点、角色或隶属机构。\
-                你可以使用其他相关主题的维基百科页面作为灵感。对于每个编辑，添加他们将关注的内容的描述。
-                相关主题的维基页面大纲供参考：
-                {examples}""",
-                ),
-                ("user", "感兴趣的主题: {topic}"),
-            ]
+        self.gen_perspectives_prompt = ChatPromptTemplate.from_messages([
+            ("system", """你需要选择一组多样化（且不同）的维基百科编辑，他们将共同努力创建一个关于该主题的全面文章。每个人代表与该主题相关的不同观点、角色或隶属机构。\
+            你可以使用其他相关主题的维基百科页面作为灵感。对于每个编辑，添加他们将关注的内容的描述。
+            相关主题的维基页面大纲供参考：
+            {examples}"""),
+            ("user", "感兴趣的主题: {topic}"),
+        ])
+        self.gen_perspectives_chain = (
+            self.gen_perspectives_prompt 
+            | ChatOpenAI(model="gpt-4o").with_structured_output(Perspectives)
         )
-        self.gen_perspectives_chain = (self.gen_perspectives_prompt | ChatOpenAI(model="gpt-4o").with_structured_output(Perspectives))
+
     async def generate_perspectives(self, topic: str, id: str):
         old_outline = self.db.query("dynamic", "summary_md", "id = ?", (id,))
-        formatted = old_outline
-        return await self.gen_perspectives_chain.ainvoke({"examples": formatted, "topic": topic})
+        return await self.gen_perspectives_chain.ainvoke({"examples": old_outline, "topic": topic})
 
 
 
@@ -153,20 +151,22 @@ class InterviewSystem:
 
     @staticmethod
     def swap_roles(state: InterviewState, name: str):
-        converted = []
-        for message in state["messages"]:
-            if isinstance(message, AIMessage) and message.name != name:
-                message = HumanMessage(**message.dict(exclude={"type"}))
-            converted.append(message)
-        return {"messages": converted}
+        return {
+            "messages": [
+                HumanMessage(**message.dict(exclude={"type"}))
+                if isinstance(message, AIMessage) and message.name != name
+                else message
+                for message in state["messages"]
+            ]
+        }
 
     async def generate_question(self, state: InterviewState):
         editor = state["editor"]
         gn_chain = (
-                RunnableLambda(self.swap_roles).bind(name=editor.name)
-                | self.gen_qn_prompt.partial(persona=editor.persona)
-                | self.fast_llm
-                | RunnableLambda(self.tag_with_name).bind(name=editor.name)
+            RunnableLambda(self.swap_roles).bind(name=editor.name)
+            | self.gen_qn_prompt.partial(persona=editor.persona)
+            | self.fast_llm
+            | RunnableLambda(self.tag_with_name).bind(name=editor.name)
         )
         result = await gn_chain.ainvoke(state)
         return {"messages": [result]}
@@ -180,16 +180,21 @@ class InterviewSystem:
 
 
     async def gen_answer(self, state: InterviewState, config: Optional[RunnableConfig] = None, name: str = "Subject_Matter_Expert", max_str_len: int = 15000):
-        # print("=====进入answer：state:", state)
-
         swapped_state = self.swap_roles(state, name)
-        # print("====格式化message：swapped_state:", swapped_state)
         queries = await self.gen_queries_chain.ainvoke(swapped_state)
-        # print("AI怎么去分步骤搜索queries:", queries)
-        # print(queries["parsed"].queries)
         query_results = await self.search.abatch(queries["parsed"].queries, config, return_exceptions=True)
-        # print("批处理搜索的结果query_results:", query_results)
         successful_results = [res for res in query_results if not isinstance(res, Exception)]
+        
+        pattern = re.compile(r'\[snippet: (.*?), link: (.*?)\]')
+        all_query_results = {match.group(2): match.group(1) for item in successful_results if (match := pattern.search(item))}
+        
+        dumped = json.dumps(all_query_results, ensure_ascii=True)
+        ai_message: AIMessage = queries["raw"]
+        tool_call = queries["raw"].additional_kwargs["tool_calls"][0]
+        tool_message = ToolMessage(tool_call_id=tool_call["id"], content=dumped)
+        
+        swapped_state["messages"].extend([ai_message, tool_message])
+        generated = await self.gen_answer_chain.ainvoke(swapped_state)
         # print("successful_results:", successful_results)
         # all_query_results = {res['link']: res['snippet'] for results in successful_results for res in results}
         # print("all_query_results:", all_query_results)
